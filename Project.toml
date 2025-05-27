@@ -1,0 +1,6 @@
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+PhysicalConstants = "5ad8b20f-a522-5ce9-bfc9-ddf1d5bda6ab"
+QuantumToolbox = "6c2fb7c5-b903-41d2-bc5e-5a7c320b9fab"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
