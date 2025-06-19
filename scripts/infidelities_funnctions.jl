@@ -120,3 +120,74 @@ function infidelity_motional_dephasing(η,Ω,na,ψ,S,N)
     (2 * na + 1) * λ2S + (3 / (16 * N)) * λ2S2
     )
 end
+
+"""
+Calculate infidelity resulting from a static motional frequency shift.
+
+Ω is the two-qubit gate Rabi frequency,
+
+δ is the detuning of the motional frequency shift from the ideal value,
+
+ψ0 is the initial state of the system,
+
+The function returns the infidelity of the two-qubit gate.
+"""
+function infidelity_static_motional_shift_numerical(Ω,δ,ψ0;kwargs...)
+    # use ψ0 to get the cutoff number of motional states, N
+    N = length(ψ0) ÷ 4  # assuming ψ0 is a vector of length 4*N
+
+    σ1x=sigmax()⊗qeye(2)⊗qeye(N)
+    σ2x=qeye(2)⊗sigmax()⊗qeye(N)
+    a=qeye(2)⊗qeye(2)⊗destroy(N)
+
+    Δ=Ω*4
+
+    ϕ=2pi*Ω^2/Δ^2
+    U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
+
+    ψend = U_ideal * ψ0
+
+    H=Ω*(σ1x+σ2x)*(a+a')+(δ+Δ)*a'*a
+
+    tlist = [0,2pi/Δ] # a list of time points of interest
+    eop_ls = [
+        ψend * ψend',              # ideal end state
+    ];
+
+    sol = sesolve(H , ψ0, tlist; e_ops = eop_ls,progress_bar= false,kwargs...)
+    1-real(sol.expect[1, end])  # infidelity
+end
+
+"""
+Infidelity resulting from an anharmonicity in the trap potential.
+
+Ω is the two-qubit Rabi frequency, 
+
+ϵ is the anharmonicity strength,
+
+ψ0 is the initial state.
+
+σ is the spin operator, default is sigmax().
+"""
+function infidelity_trap_anharmonicity_numerical(Ω,ϵ,ψ0;σ=sigmax(),kwargs...)
+    N = length(ψ0) ÷ 4  # assuming ψ0 is a vector of length 4*N
+
+    σ1x=σ⊗qeye(2)⊗qeye(N)
+    σ2x=qeye(2)⊗σ⊗qeye(N)
+    a=qeye(2)⊗qeye(2)⊗destroy(N)
+
+    Δ=Ω*4
+
+    ϕ=2pi*Ω^2/Δ^2
+    U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
+
+    H=Ω*(σ1x+σ2x)*(a+a')+Δ*a'*a+6ϵ*(a'*a+(a'*a)^2)
+
+    tlist = [0,2pi/Δ] # a list of time points of interest
+    eop_ls = [
+        ψend * ψend',              # ideal end state
+    ];
+
+    sol = sesolve(H , ψ0, tlist; e_ops = eop_ls,progress_bar= false,kwargs...)
+    1-real(sol.expect[1, end])  # infidelity
+end
