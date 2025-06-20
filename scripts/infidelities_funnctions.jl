@@ -146,15 +146,16 @@ function infidelity_static_motional_shift_numerical(Ω,δ,ψ0;kwargs...)
     U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
 
     ψend = U_ideal * ψ0
+    ψend_p=ptrace(ψend,(1,2))
 
     H=Ω*(σ1x+σ2x)*(a+a')+(δ+Δ)*a'*a
 
     tlist = [0,2pi/Δ] # a list of time points of interest
     eop_ls = [
-        ψend * ψend',              # ideal end state
+        ψend_p⊗qeye(N),               # ideal end state
     ];
 
-    sol = sesolve(H , ψ0, tlist; e_ops = eop_ls,progress_bar= false,kwargs...)
+    sol = sesolve(H , ψ0, tlist; e_ops = eop_ls,kwargs...)
     1-real(sol.expect[1, end])  # infidelity
 end
 
@@ -180,14 +181,137 @@ function infidelity_trap_anharmonicity_numerical(Ω,ϵ,ψ0;σ=sigmax(),kwargs...
 
     ϕ=2pi*Ω^2/Δ^2
     U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
+    ψend = U_ideal * ψ0
+    ψend_p=ptrace(ψend,(1,2))
 
     H=Ω*(σ1x+σ2x)*(a+a')+Δ*a'*a+6ϵ*(a'*a+(a'*a)^2)
 
+
     tlist = [0,2pi/Δ] # a list of time points of interest
     eop_ls = [
-        ψend * ψend',              # ideal end state
+        ψend_p⊗qeye(N),              # ideal end state
     ];
 
-    sol = sesolve(H , ψ0, tlist; e_ops = eop_ls,progress_bar= false,kwargs...)
+    sol = sesolve(H , ψ0, tlist; e_ops = eop_ls,kwargs...)
+    1-real(sol.expect[1, end])  # infidelity
+end
+
+"""
+Infidelity resulting from an anharmonicity in the trap potential.
+
+Ω is the two-qubit Rabi frequency, 
+
+Ω2 is the second-order field inhomogeneity strength,
+
+ψ0 is the initial state.
+
+σ is the spin operator, default is sigmax().
+"""
+function infidelity_field_inhomogeneity_numerical(Ω,Ω2,ψ0;σ=sigmax(),kwargs...)
+    N = length(ψ0) ÷ 4  # assuming ψ0 is a vector of length 4*N
+
+    σ1x=σ⊗qeye(2)⊗qeye(N)
+    σ2x=qeye(2)⊗σ⊗qeye(N)
+    a=qeye(2)⊗qeye(2)⊗destroy(N)
+
+    Δ=Ω*4
+
+    ϕ=2pi*Ω^2/Δ^2
+    U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
+    ψend = U_ideal * ψ0
+    ψend_p=ptrace(ψend,(1,2))
+
+    H=Ω*(σ1x+σ2x)*(a+a')+Δ*a'*a+3Ω2*(σ1x+σ2x)*(a'*a*a'+a*a'*a)
+
+    tlist = [0,2pi/Δ] # a list of time points of interest
+    eop_ls = [
+        ψend_p⊗qeye(N),              # ideal end state
+    ];
+
+    sol = sesolve(H , ψ0, tlist; e_ops = eop_ls,kwargs...)
+    1-real(sol.expect[1, end])  # infidelity
+end
+
+
+
+"""
+Infidelity resulting from an anharmonicity in the trap potential.
+
+Ω is the two-qubit Rabi frequency, 
+
+η is the dephasing rate,
+
+ψ0 is the initial state.
+
+σ is the spin operator, default is sigmax().
+"""
+function infidelity_motional_dephasing_numerical(Ω,η,ψ0::QuantumObject{Ket};σ=sigmax(),kwargs...)
+    N = length(ψ0) ÷ 4  # assuming ψ0 is a vector of length 4*N
+
+    σ1x=σ⊗qeye(2)⊗qeye(N)
+    σ2x=qeye(2)⊗σ⊗qeye(N)
+    a=qeye(2)⊗qeye(2)⊗destroy(N)
+
+    c_ops = [sqrt(η) * a'*a]
+
+    Δ=Ω*4
+
+    ϕ=2pi*Ω^2/Δ^2
+    U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
+
+    ψend = U_ideal * ψ0
+
+    ψend_p=ptrace(ψend,(1,2))
+
+    H=Ω*(σ1x+σ2x)*(a+a')+Δ*a'*a
+
+    tlist = [0,2pi/Δ] # a list of time points of interest
+    eop_ls = [
+        ψend_p⊗qeye(N),              # ideal end state
+    ];
+
+    sol = mesolve(H , ψ0, tlist, c_ops; e_ops = eop_ls,kwargs...)
+    1-real(sol.expect[1, end])  # infidelity
+end
+
+
+"""
+Infidelity resulting from an anharmonicity in the trap potential.
+
+Ω is the two-qubit Rabi frequency, 
+
+nh is the heating rate,
+
+ψ0 is the initial state.
+
+σ is the spin operator, default is sigmax().
+"""
+function infidelity_heating_numerical(Ω,nh,ψ0::QuantumObject{Ket};σ=sigmax(),kwargs...)
+    N = length(ψ0) ÷ 4  # assuming ψ0 is a vector of length 4*N
+
+    σ1x=σ⊗qeye(2)⊗qeye(N)
+    σ2x=qeye(2)⊗σ⊗qeye(N)
+    a=qeye(2)⊗qeye(2)⊗destroy(N)
+
+    c_ops = [sqrt(nh) * a,
+             sqrt(nh) * a']
+
+    Δ=Ω*4
+
+    ϕ=2pi*Ω^2/Δ^2
+    U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
+
+    ψend = U_ideal * ψ0
+
+    ψend_p=ptrace(ψend,(1,2))
+
+    H=Ω*(σ1x+σ2x)*(a+a')+Δ*a'*a
+
+    tlist = [0,2pi/Δ] # a list of time points of interest
+    eop_ls = [
+        ψend_p⊗qeye(N),              # ideal end state
+    ];
+
+    sol = mesolve(H, ψ0, tlist, c_ops; e_ops = eop_ls,kwargs...)
     1-real(sol.expect[1, end])  # infidelity
 end
