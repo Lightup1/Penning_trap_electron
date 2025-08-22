@@ -39,7 +39,7 @@ c_ops=cu.(c_ops)
 eop_ls=cu.(eop_ls)
 
 ##
-tlist = [0,2pi/Δ] # a list of time points of interest
+tlist = [0,4*2pi/Δ] # a list of time points of interest
 
 ##
 sol = mesolve(H, ψ0, tlist, c_ops; e_ops = eop_ls)
