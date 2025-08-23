@@ -31,6 +31,6 @@ tlist = [0,2*2pi/Δ] # a list of time points of interest
 #     ψend_p⊗qeye(N),              # ideal end state
 # ];
 ##
-# sol = mesolve(H, ψ0, tlist, c_ops; e_ops = eop_ls,kwargs...)
-@benchmark sol = mesolve($H, $ψ0, $tlist, $c_ops; progress_bar=$Val(false))
+sol = mesolve(H, ψ0, tlist, c_ops)
+# @benchmark sol = mesolve($H, $ψ0, $tlist, $c_ops; progress_bar=$Val(false))
 # 1-real(sol.expect[1, end])  # infidelity
