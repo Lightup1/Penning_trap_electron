@@ -52,7 +52,7 @@ using CUDA
 CUDA.allowscalar(false) # Avoid unexpected scalar indexing
 using BenchmarkTools 
 ##
-N = 20 # cutoff of the Hilbert space dimension
+N = 200 # cutoff of the Hilbert space dimension
 ω = 1.0 # frequency of the harmonic oscillator
 γ = 0.1 # damping rate
 
@@ -60,7 +60,7 @@ a_gpu = cu(destroy(N)) # The only difference in the code is the cu() function
 
 H_gpu = ω * a_gpu' * a_gpu
 
-ψ0_gpu = cu(fock(N, 3))
+ψ0_gpu = cu(fock(N, 20))
 
 
 c_ops = [sqrt(γ) * a_gpu]
@@ -70,7 +70,7 @@ tlist = [0,100] # time list
 sol = mesolve(H_gpu, ψ0_gpu, tlist, c_ops, e_ops = e_ops)
 
 ##
-@benchmark mesolve($H_gpu, $ρ0_gpu, $tlist, $c_ops, e_ops = $e_ops,progress_bar=$Val(false))
+@benchmark mesolve($H_gpu, $ψ0_gpu, $tlist, $c_ops, e_ops = $e_ops,progress_bar=$Val(false))
 ##
 ρ0_gpu = ψ0_gpu*ψ0_gpu'
 dense_0=QuantumToolbox.to_dense(QuantumToolbox._complex_float_type(ComplexF64), QuantumToolbox.mat2vec(ket2dm(ψ0_gpu).data))
@@ -89,3 +89,17 @@ prob=QuantumToolbox.ODEProblem{QuantumToolbox.getVal(Val(true)),QuantumToolbox.F
 end setup=(f=prob.f;w=copy(dense_0); du=copy(dense_0);u=copy(dense_0);p=[1];t=0)
 ##
 prob.f(copy(dense_0),copy(dense_0),copy(dense_0),[1],0) 
+##
+using LinearAlgebra
+using SparseArrays
+using BenchmarkTools
+using CUDA
+CUDA.allowscalar(false)
+##
+# Dense case works
+A = CUDA.rand(ComplexF64, 1000, 1000)
+x = CUDA.rand(ComplexF64, 1000)
+y = similar(x)
+
+@btime mul!($y, $A, $x);
+@code_warntype mul!(y, A, x)
