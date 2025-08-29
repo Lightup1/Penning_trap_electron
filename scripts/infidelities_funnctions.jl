@@ -1,3 +1,32 @@
+
+# Utility: number of binary digits needed to represent k
+# For example: k=0 → 0,  k=3 (0b11) → 2
+@inline bitlen(k::Integer) = k == 0 ? 0 : (sizeof(UInt)*8 - leading_zeros(UInt(k)))
+
+# Utility: map x=1.0 to "just below 1" (so the value at 1 is the left-limit)
+@inline to_left1(x::Real) = (xf = float(x); xf == 1 ? prevfloat(xf) : xf)
+
+"""
+    walsh(k, x) -> Int8
+
+Stable Walsh function evaluation on [0,1].
+- k is the Walsh function index.
+- x is in [0,1]. If x==1, we return the left-limit value.
+- This implementation automatically chooses the correct dyadic resolution
+  based on k, so the result does not change with an arbitrary parameter m.
+"""
+@inline function walsh(k::Integer, x::Real)::Int8
+    xf = to_left1(x)
+    @assert 0 ≤ xf ≤ 1 "x must be in [0,1]"
+    B = bitlen(k)                           # number of bits needed for k
+    B == 0 && return Int8(1)                # W0(x) = +1 everywhere
+    N  = UInt(1) << B                       # number of dyadic bins = 2^B
+    j  = clamp(floor(UInt, ldexp(xf, B)),   # bin index j = floor(x*2^B)
+               UInt(0), N-UInt(1))
+    # Value is (-1)^(popcount(k & j))
+    return isodd(count_ones(UInt(k) & j)) ? Int8(-1) : Int8(1)
+end
+
 """
 δ is the static motional frequency shift.
 
@@ -160,6 +189,61 @@ function infidelity_static_motional_shift_numerical(Ω,δ,ψ0;kwargs...)
 end
 
 """
+Calculate infidelity resulting from a static motional frequency shift.
+
+Ω is the two-qubit gate Rabi frequency,
+
+δ is the detuning of the motional frequency shift from the ideal value,
+
+ψ0 is the initial state of the system,
+
+Walsh_integer=k means use Walsh function of order 2^k-1 for modulation,
+
+The function returns the infidelity of the two-qubit gate.
+"""
+function infidelity_static_motional_shift_numerical(Ω,δ,ψ0,Walsh_integer::Int;kwargs...)
+    Walsh_index=2^Walsh_integer-1
+    # use ψ0 to get the cutoff number of motional states, N
+    N = length(ψ0) ÷ 4  # assuming ψ0 is a vector of length 4*N
+
+    modulation_func(p,t)=walsh(p.widx,t/(p.tend))
+
+    σ1x=sigmax()⊗qeye(2)⊗qeye(N)
+    σ2x=qeye(2)⊗sigmax()⊗qeye(N)
+    a=qeye(2)⊗qeye(2)⊗destroy(N)
+
+    Δ=Ω*4
+    # Δ1=2^Walsh_integer*Δ
+    Δ1=2^(Walsh_integer/2)*4*Ω
+
+    ϕ=2pi*Ω^2/Δ^2
+    U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
+
+    ψend = U_ideal * ψ0
+    ψend_p=ptrace(ψend,(1,2))
+
+    H0=(δ+Δ1)*a'*a
+    # H0=δ*a'*a
+    H1=Ω*(σ1x+σ2x)*(a+a')
+    # H=H0+H1
+    
+    H_tuple = (
+    H0,
+    (H1, modulation_func),
+    )
+
+    H_t=QobjEvo(H_tuple)
+
+    tlist = [0,2pi/Δ1*2^Walsh_integer] # a list of time points of interest
+    eop_ls = [
+        ψend_p⊗qeye(N),               # ideal end state
+    ];
+
+    sol = sesolve(H_t , ψ0, tlist; params = (widx=Walsh_index,tend=tlist[end]),e_ops = eop_ls,kwargs...)
+    1-real(sol.expect[1, end])  # infidelity
+end
+
+"""
 Infidelity resulting from an anharmonicity in the trap potential.
 
 Ω is the two-qubit Rabi frequency, 
@@ -313,5 +397,62 @@ function infidelity_heating_numerical(Ω,nh,ψ0::QuantumObject{Ket};σ=sigmax(),
     ];
 
     sol = mesolve(H, ψ0, tlist, c_ops; e_ops = eop_ls,kwargs...)
+    1-real(sol.expect[1, end])  # infidelity
+end
+
+"""
+Infidelity resulting from an anharmonicity in the trap potential.
+
+Ω is the two-qubit Rabi frequency, 
+
+nh is the heating rate,
+
+ψ0 is the initial state.
+
+Walsh_integer=k means use Walsh function of order 2^k-1 for modulation,
+
+σ is the spin operator, default is sigmax().
+"""
+function infidelity_heating_numerical(Ω,nh,ψ0::QuantumObject{Ket},Walsh_integer;σ=sigmax(),kwargs...)
+    Walsh_index=2^Walsh_integer-1
+    modulation_func(p,t)=walsh(p.widx,t/(p.tend))
+    N = length(ψ0) ÷ 4  # assuming ψ0 is a vector of length 4*N
+
+    σ1x=σ⊗qeye(2)⊗qeye(N)
+    σ2x=qeye(2)⊗σ⊗qeye(N)
+    a=qeye(2)⊗qeye(2)⊗destroy(N)
+
+    c_ops = [sqrt(nh) * a,
+             sqrt(nh) * a']
+
+    Δ=Ω*4
+    Δ1=2^(Walsh_integer/2)*4*Ω
+
+    ϕ=2pi*Ω^2/Δ^2
+    U_ideal = exp(1im*ϕ*(σ1x+σ2x)^2)
+
+    ψend = U_ideal * ψ0
+
+    ψend_p=ptrace(ψend,(1,2))
+
+    # H=Ω*(σ1x+σ2x)*(a+a')+Δ*a'*a
+
+    H0=Δ1*a'*a
+    # H0=δ*a'*a
+    H1=Ω*(σ1x+σ2x)*(a+a')
+    # H=H0+H1
+    
+    H_tuple = (
+    H0,
+    (H1, modulation_func),
+    )
+    H_t=QobjEvo(H_tuple)
+    # tlist = [0,2pi/Δ] # a list of time points of interest
+    tlist = [0,2pi/Δ1*2^Walsh_integer] # a list of time points of interest
+    eop_ls = [
+        ψend_p⊗qeye(N),              # ideal end state
+    ];
+
+    sol = mesolve(H_t, ψ0, tlist, c_ops;params = (widx=Walsh_index,tend=tlist[end]), e_ops = eop_ls,kwargs...)
     1-real(sol.expect[1, end])  # infidelity
 end
